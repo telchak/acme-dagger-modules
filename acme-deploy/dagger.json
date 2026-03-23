@@ -1,0 +1,34 @@
+{
+  "name": "acme-deploy",
+  "description": "AcmeCorp deployment module — compliant, opinionated, simple.",
+  "engineVersion": "v0.20.3",
+  "sdk": {
+    "source": "python"
+  },
+  "dependencies": [
+    {
+      "name": "gcp-auth",
+      "source": "github.com/telchak/daggerverse/gcp-auth@gcp-auth/v0.2.0",
+      "pin": "b164465ed0d8b37d56cab2211d3ef48983fba8b9"
+    },
+    {
+      "name": "gcp-artifact-registry",
+      "source": "github.com/telchak/daggerverse/gcp-artifact-registry@gcp-artifact-registry/v0.2.0",
+      "pin": "b164465ed0d8b37d56cab2211d3ef48983fba8b9"
+    },
+    {
+      "name": "gcp-cloud-run",
+      "source": "github.com/telchak/daggerverse/gcp-cloud-run@gcp-cloud-run/v0.2.0",
+      "pin": "b164465ed0d8b37d56cab2211d3ef48983fba8b9"
+    },
+    {
+      "name": "gcp-firebase",
+      "source": "github.com/telchak/daggerverse/gcp-firebase@gcp-firebase/v0.2.0",
+      "pin": "b164465ed0d8b37d56cab2211d3ef48983fba8b9"
+    },
+    {
+      "name": "trivy",
+      "source": "github.com/sagikazarmark/daggerverse/trivy@v0.6.0"
+    }
+  ]
+}

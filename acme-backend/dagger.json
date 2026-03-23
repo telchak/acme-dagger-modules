@@ -1,0 +1,15 @@
+{
+  "name": "acme-backend",
+  "description": "AcmeCorp Python backend builder — standardized, cached, production-ready.",
+  "engineVersion": "v0.20.3",
+  "sdk": {
+    "source": "python"
+  },
+  "dependencies": [
+    {
+      "name": "python-build",
+      "source": "github.com/telchak/daggerverse/python-build@python-build/v0.2.0",
+      "pin": "b164465ed0d8b37d56cab2211d3ef48983fba8b9"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "tests",
+  "description": "Integration tests for AcmeCorp private modules.",
+  "engineVersion": "v0.20.3",
+  "sdk": {
+    "source": "python"
+  },
+  "dependencies": [
+    {
+      "name": "acme-backend",
+      "source": "../acme-backend"
+    },
+    {
+      "name": "acme-frontend",
+      "source": "../acme-frontend"
+    },
+    {
+      "name": "acme-deploy",
+      "source": "../acme-deploy"
+    }
+  ]
+}
