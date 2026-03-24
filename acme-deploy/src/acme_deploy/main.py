@@ -100,7 +100,7 @@ class AcmeDeploy:
         or above are found. Pinned to a safe Trivy version.
         """
         container = dag.acme_backend().build(source=source, port=port)
-        return await dag.trivy(version=TRIVY_VERSION).container(container).output("table")
+        return await dag.trivy(version=TRIVY_VERSION).container(container).output(format="table")
 
     def _build_labels(
         self,
@@ -149,7 +149,7 @@ class AcmeDeploy:
         labels = self._build_labels(team, environment, git_branch, git_sha)
 
         # Scan for vulnerabilities before shipping
-        await dag.trivy(version=TRIVY_VERSION).container(container).output("table")
+        await dag.trivy(version=TRIVY_VERSION).container(container).output(format="table")
 
         # Publish to Artifact Registry
         image_uri = await dag.gcp_artifact_registry(gcloud=gcloud).publish(
