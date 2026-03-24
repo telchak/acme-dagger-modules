@@ -235,15 +235,23 @@ class AcmeDeploy:
         self._validate_production_branch(environment, git_branch)
         self._validate_and_resolve(team, service_name, environment, region="europe-west1")
 
-        # Get an access token for Firebase CLI authentication
-        gcloud = self._authenticate(
-            project_id=project_id,
-            oidc_request_token=oidc_request_token,
-            oidc_request_url=oidc_request_url,
-            gcloud_config=gcloud_config,
-        )
-        token_output = await gcloud.with_exec(["gcloud", "auth", "print-access-token"]).stdout()
-        access_token = dag.set_secret("firebase_access_token", token_output.strip())
+        # Authenticate to Firebase: use ADC credentials (local) or OIDC (CI).
+        # gcp-firebase has its own auth — it doesn't use gcloud containers.
+        firebase_auth: dict = {}
+        if gcloud_config:
+            credentials = dag.set_secret(
+                "firebase_credentials",
+                await gcloud_config.file("application_default_credentials.json").contents(),
+            )
+            firebase_auth["credentials"] = credentials
+        elif oidc_request_token and oidc_request_url:
+            gcloud = self._authenticate(
+                project_id=project_id,
+                oidc_request_token=oidc_request_token,
+                oidc_request_url=oidc_request_url,
+            )
+            token_output = await gcloud.with_exec(["gcloud", "auth", "print-access-token"]).stdout()
+            firebase_auth["access_token"] = dag.set_secret("firebase_access_token", token_output.strip())
 
         channel = "live" if environment == "production" else environment
 
@@ -251,13 +259,13 @@ class AcmeDeploy:
             return await dag.gcp_firebase().deploy(
                 project_id=project_id,
                 source=source,
-                access_token=access_token,
                 deploy_functions=False,
+                **firebase_auth,
             )
 
         return await dag.gcp_firebase().deploy_preview(
             project_id=project_id,
             channel_id=channel,
             source=source,
-            access_token=access_token,
+            **firebase_auth,
         )
