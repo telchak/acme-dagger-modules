@@ -148,6 +148,7 @@ class AcmeDeploy:
         environment: Annotated[str, Doc("Target environment")] = "staging",
         region: Annotated[str, Doc("GCP region")] = "europe-west1",
         port: Annotated[int, Doc("Application port")] = 8080,
+        repository: Annotated[str, Doc("Artifact Registry repository name (defaults to acme-{team})")] = "",
         git_branch: Annotated[str, Doc("Git branch (for audit labels)")] = "",
         git_sha: Annotated[str, Doc("Git commit SHA (for audit labels)")] = "",
     ) -> str:
@@ -187,7 +188,7 @@ class AcmeDeploy:
             gcloud=gcloud,
             project_id=project_id,
             region=region,
-            repository=f"acme-{team}",
+            repository=repository or f"acme-{team}",
             image_name=service_name,
             tag=f"{environment}-latest",
         )
