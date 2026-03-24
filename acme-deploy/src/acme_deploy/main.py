@@ -7,15 +7,11 @@ from dagger import DefaultPath, Doc, check, dag, function, object_type
 
 
 ALLOWED_REGIONS = ["europe-west1", "us-central1"]
+ALLOWED_ENVIRONMENTS = ["staging", "production"]
 
 # Pin Trivy to a known safe version.
 # Versions 0.69.4–0.69.6 were compromised in a supply chain attack (CVE-2026-33634).
 TRIVY_VERSION = "0.69.3"
-
-ENVIRONMENT_PROJECTS = {
-    "staging": "acmecorp-staging",
-    "production": "acmecorp-prod",
-}
 
 # Production deployments require multi-region for high availability.
 PRODUCTION_REGIONS = ["europe-west1", "us-central1"]
@@ -37,7 +33,7 @@ class AcmeDeploy:
 
     Wraps public daggerverse modules with org-specific defaults:
     - Enforces naming conventions (acme-{team}-{service}-{env})
-    - Always uses OIDC authentication (no service account keys in CI)
+    - Supports OIDC authentication (CI) and local ADC (developer laptops)
     - Deploys to the org's standard regions
     - Injects required labels and metadata for cost tracking and audit
     - Production services always authenticated (no public endpoints)
@@ -50,19 +46,16 @@ class AcmeDeploy:
         service_name: str,
         environment: str,
         region: str,
-    ) -> dict:
-        """Shared validation and naming logic."""
+    ) -> str:
+        """Shared validation and naming logic. Returns the full service name."""
         if region not in ALLOWED_REGIONS:
             msg = f"Region {region} not allowed. Must be one of: {ALLOWED_REGIONS}"
             raise ValueError(msg)
-        if environment not in ENVIRONMENT_PROJECTS:
-            msg = f"Environment {environment} not allowed. Must be one of: {list(ENVIRONMENT_PROJECTS)}"
+        if environment not in ALLOWED_ENVIRONMENTS:
+            msg = f"Environment {environment} not allowed. Must be one of: {ALLOWED_ENVIRONMENTS}"
             raise ValueError(msg)
 
-        return {
-            "full_name": f"acme-{team}-{service_name}-{environment}",
-            "project": ENVIRONMENT_PROJECTS[environment],
-        }
+        return f"acme-{team}-{service_name}-{environment}"
 
     def _validate_production_branch(self, environment: str, git_branch: str) -> None:
         """Refuse production deployments from non-main branches."""
@@ -75,7 +68,7 @@ class AcmeDeploy:
 
     def _authenticate(
         self,
-        project: str,
+        project_id: str,
         oidc_request_token: dagger.Secret | None = None,
         oidc_request_url: dagger.Secret | None = None,
         gcloud_config: dagger.Directory | None = None,
@@ -87,17 +80,17 @@ class AcmeDeploy:
         """
         if gcloud_config:
             return dag.gcp_auth().gcloud_container_from_host(
-                project_id=project,
+                project_id=project_id,
                 gcloud_config=gcloud_config,
             )
 
         if oidc_request_token and oidc_request_url:
             return dag.gcp_auth().gcloud_container_from_github_actions(
                 workload_identity_provider="projects/123456/locations/global/workloadIdentityPools/github/providers/github-actions",
-                project_id=project,
+                project_id=project_id,
                 oidc_request_token=oidc_request_token,
                 oidc_request_url=oidc_request_url,
-                service_account_email=f"ci-deployer@{project}.iam.gserviceaccount.com",
+                service_account_email=f"ci-deployer@{project_id}.iam.gserviceaccount.com",
             )
 
         msg = "Provide either gcloud-config (local) or oidc-request-token + oidc-request-url (CI)"
@@ -148,6 +141,7 @@ class AcmeDeploy:
         container: Annotated[dagger.Container, Doc("Container to deploy (from acme-backend build)")],
         service_name: Annotated[str, Doc("Service name (without prefix)")],
         team: Annotated[str, Doc("Team name for naming and labels")],
+        project_id: Annotated[str, Doc("GCP project ID to deploy to")],
         oidc_request_token: Annotated[dagger.Secret | None, Doc("ACTIONS_ID_TOKEN_REQUEST_TOKEN (CI)")] = None,
         oidc_request_url: Annotated[dagger.Secret | None, Doc("ACTIONS_ID_TOKEN_REQUEST_URL (CI)")] = None,
         gcloud_config: Annotated[dagger.Directory | None, Doc("Host gcloud config dir for local auth (~/.config/gcloud)")] = None,
@@ -170,9 +164,9 @@ class AcmeDeploy:
         for testing convenience.
         """
         self._validate_production_branch(environment, git_branch)
-        ctx = self._validate_and_resolve(team, service_name, environment, region)
+        full_name = self._validate_and_resolve(team, service_name, environment, region)
         gcloud = self._authenticate(
-            project=ctx["project"],
+            project_id=project_id,
             oidc_request_token=oidc_request_token,
             oidc_request_url=oidc_request_url,
             gcloud_config=gcloud_config,
@@ -185,7 +179,7 @@ class AcmeDeploy:
         # Publish to Artifact Registry
         image_uri = await dag.gcp_artifact_registry(gcloud=gcloud).publish(
             container=container,
-            project=ctx["project"],
+            project=project_id,
             region=region,
             repository=f"acme-{team}",
             image=service_name,
@@ -194,7 +188,7 @@ class AcmeDeploy:
 
         # Deploy to Cloud Run with org-standard configuration
         url = await dag.gcp_cloud_run(gcloud=gcloud).service().deploy(
-            name=ctx["full_name"],
+            name=full_name,
             image=image_uri,
             region=region,
             allow_unauthenticated=(environment != "production"),
@@ -215,6 +209,7 @@ class AcmeDeploy:
         dist: Annotated[dagger.Directory, Doc("Built frontend output (from acme-frontend build)")],
         service_name: Annotated[str, Doc("Service name for the hosting site")],
         team: Annotated[str, Doc("Team name")],
+        project_id: Annotated[str, Doc("GCP project ID to deploy to")],
         oidc_request_token: Annotated[dagger.Secret | None, Doc("ACTIONS_ID_TOKEN_REQUEST_TOKEN (CI)")] = None,
         oidc_request_url: Annotated[dagger.Secret | None, Doc("ACTIONS_ID_TOKEN_REQUEST_URL (CI)")] = None,
         gcloud_config: Annotated[dagger.Directory | None, Doc("Host gcloud config dir for local auth (~/.config/gcloud)")] = None,
@@ -231,9 +226,9 @@ class AcmeDeploy:
         oidc-request-token + oidc-request-url for CI (GitHub Actions).
         """
         self._validate_production_branch(environment, git_branch)
-        ctx = self._validate_and_resolve(team, service_name, environment, region="europe-west1")
+        self._validate_and_resolve(team, service_name, environment, region="europe-west1")
         gcloud = self._authenticate(
-            project=ctx["project"],
+            project_id=project_id,
             oidc_request_token=oidc_request_token,
             oidc_request_url=oidc_request_url,
             gcloud_config=gcloud_config,
@@ -243,7 +238,7 @@ class AcmeDeploy:
 
         url = await dag.gcp_firebase(gcloud=gcloud).hosting().deploy(
             dist=dist,
-            project=ctx["project"],
+            project=project_id,
             channel=channel,
         )
 
