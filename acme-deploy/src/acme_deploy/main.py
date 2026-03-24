@@ -138,7 +138,7 @@ class AcmeDeploy:
     @function
     async def cloud_run(
         self,
-        container: Annotated[dagger.Container, Doc("Container to deploy (from acme-backend build)")],
+        source: Annotated[dagger.Directory, Doc("Backend source directory")],
         service_name: Annotated[str, Doc("Service name (without prefix)")],
         team: Annotated[str, Doc("Team name for naming and labels")],
         project_id: Annotated[str, Doc("GCP project ID to deploy to")],
@@ -147,13 +147,15 @@ class AcmeDeploy:
         gcloud_config: Annotated[dagger.Directory | None, Doc("Host gcloud config dir for local auth (~/.config/gcloud)")] = None,
         environment: Annotated[str, Doc("Target environment")] = "staging",
         region: Annotated[str, Doc("GCP region")] = "europe-west1",
+        port: Annotated[int, Doc("Application port")] = 8080,
         git_branch: Annotated[str, Doc("Git branch (for audit labels)")] = "",
         git_sha: Annotated[str, Doc("Git commit SHA (for audit labels)")] = "",
     ) -> str:
-        """Deploy a container to Cloud Run with AcmeCorp compliance.
+        """Build and deploy a backend service to Cloud Run with AcmeCorp compliance.
 
-        Handles authentication, Artifact Registry push, and Cloud Run
-        deployment in a single call. Enforces naming conventions,
+        Builds the container from source using acme-backend, scans for
+        vulnerabilities, pushes to Artifact Registry, and deploys to
+        Cloud Run — all in a single call. Enforces naming conventions,
         region whitelist, production branch gate, and access controls.
 
         Authentication: pass gcloud-config for local development, or
@@ -172,6 +174,9 @@ class AcmeDeploy:
             gcloud_config=gcloud_config,
         )
         labels = self._build_labels(team, environment, git_branch, git_sha)
+
+        # Build the container from source
+        container = dag.acme_backend().build(source=source, port=port)
 
         # Scan for vulnerabilities before shipping
         await dag.trivy(version=TRIVY_VERSION).container(container).output(format="table")
@@ -206,7 +211,7 @@ class AcmeDeploy:
     @function
     async def firebase(
         self,
-        dist: Annotated[dagger.Directory, Doc("Built frontend output (from acme-frontend build)")],
+        source: Annotated[dagger.Directory, Doc("Frontend source directory")],
         service_name: Annotated[str, Doc("Service name for the hosting site")],
         team: Annotated[str, Doc("Team name")],
         project_id: Annotated[str, Doc("GCP project ID to deploy to")],
@@ -216,11 +221,11 @@ class AcmeDeploy:
         environment: Annotated[str, Doc("Target environment")] = "staging",
         git_branch: Annotated[str, Doc("Git branch (for audit trail)")] = "",
     ) -> str:
-        """Deploy a frontend to Firebase Hosting with AcmeCorp compliance.
+        """Build and deploy a frontend to Firebase Hosting with AcmeCorp compliance.
 
-        Deploys to production channel ('live') or a preview channel
-        matching the environment name. Production deploys are gated
-        to the main branch only.
+        Builds the frontend from source using acme-frontend, then deploys
+        to production channel ('live') or a preview channel matching the
+        environment name. Production deploys are gated to the main branch only.
 
         Authentication: pass gcloud-config for local development, or
         oidc-request-token + oidc-request-url for CI (GitHub Actions).
@@ -233,6 +238,9 @@ class AcmeDeploy:
             oidc_request_url=oidc_request_url,
             gcloud_config=gcloud_config,
         )
+
+        # Build the frontend from source
+        dist = dag.acme_frontend().build(source=source)
 
         channel = "live" if environment == "production" else environment
 

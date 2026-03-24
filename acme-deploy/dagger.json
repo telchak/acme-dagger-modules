@@ -33,6 +33,10 @@
     {
       "name": "acme-backend",
       "source": "../acme-backend"
+    },
+    {
+      "name": "acme-frontend",
+      "source": "../acme-frontend"
     }
   ]
 }
