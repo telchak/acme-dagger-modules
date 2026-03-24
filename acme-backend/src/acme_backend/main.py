@@ -49,11 +49,18 @@ class AcmeBackend:
         entrypoint. Returns a Container that can be passed directly
         to acme-deploy.
         """
+        build_dir = dag.python_build().build(
+            source=source,
+            python_version="3.13",
+            pip_cache=dag.cache_volume("acme-pip"),
+        )
         return (
-            dag.python_build()
-            .with_base(APPROVED_BASE_IMAGE)
-            .with_pip_cache(dag.cache_volume("acme-pip"))
-            .build(source=source)
+            dag.container()
+            .from_(APPROVED_BASE_IMAGE)
+            .with_workdir("/app")
+            .with_directory("/app", build_dir)
+            .with_mounted_cache("/root/.cache/pip", dag.cache_volume("acme-pip"))
+            .with_exec(["pip", "install", "-r", "requirements.txt"])
             .with_env_variable("PORT", str(port))
             .with_exposed_port(port)
             .with_label("org.opencontainers.image.vendor", "AcmeCorp")
