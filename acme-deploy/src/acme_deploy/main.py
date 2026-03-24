@@ -254,11 +254,13 @@ class AcmeDeploy:
             firebase_auth["access_token"] = dag.set_secret("firebase_access_token", token_output.strip())
 
         channel = "live" if environment == "production" else environment
+        build_command = f"npm run build -- --configuration={environment}"
 
         if channel == "live":
             return await dag.gcp_firebase().deploy(
                 project_id=project_id,
                 source=source,
+                build_command=build_command,
                 deploy_functions=False,
                 **firebase_auth,
             )
@@ -267,5 +269,6 @@ class AcmeDeploy:
             project_id=project_id,
             channel_id=channel,
             source=source,
+            build_command=build_command,
             **firebase_auth,
         )
