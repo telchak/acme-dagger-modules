@@ -8,6 +8,10 @@ from dagger import Doc, dag, function, object_type
 
 ALLOWED_REGIONS = ["europe-west1", "us-central1"]
 
+# Pin Trivy to a known safe version.
+# Versions 0.69.4–0.69.6 were compromised in a supply chain attack (CVE-2026-33634).
+TRIVY_VERSION = "0.69.3"
+
 ENVIRONMENT_PROJECTS = {
     "staging": "acmecorp-staging",
     "production": "acmecorp-prod",
@@ -83,8 +87,9 @@ class AcmeDeploy:
 
         Uses Trivy to check for HIGH and CRITICAL CVEs. Fails the
         pipeline if any are found — no vulnerable containers ship.
+        Pinned to a known safe version to avoid supply chain compromise.
         """
-        await dag.trivy().container(container).output("table")
+        await dag.trivy(version=TRIVY_VERSION).container(container).output("table")
 
     def _build_labels(
         self,
