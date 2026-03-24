@@ -8,8 +8,8 @@
   "dependencies": [
     {
       "name": "gcp-auth",
-      "source": "github.com/telchak/daggerverse/gcp-auth@gcp-auth/v0.2.0",
-      "pin": "b164465ed0d8b37d56cab2211d3ef48983fba8b9"
+      "source": "github.com/telchak/daggerverse/gcp-auth@gcp-auth/v0.2.1",
+      "pin": "5a29ae8686160c351c531ea018cec5004f745ba9"
     },
     {
       "name": "gcp-artifact-registry",

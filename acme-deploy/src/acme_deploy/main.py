@@ -75,18 +75,33 @@ class AcmeDeploy:
 
     def _authenticate(
         self,
-        oidc_request_token: dagger.Secret,
-        oidc_request_url: dagger.Secret,
         project: str,
+        oidc_request_token: dagger.Secret | None = None,
+        oidc_request_url: dagger.Secret | None = None,
+        gcloud_config: dagger.Directory | None = None,
     ) -> dagger.Container:
-        """OIDC authentication via GitHub Actions and Workload Identity Federation."""
-        return dag.gcp_auth().gcloud_container_from_github_actions(
-            workload_identity_provider="projects/123456/locations/global/workloadIdentityPools/github/providers/github-actions",
-            project_id=project,
-            oidc_request_token=oidc_request_token,
-            oidc_request_url=oidc_request_url,
-            service_account_email=f"ci-deployer@{project}.iam.gserviceaccount.com",
-        )
+        """Authenticate to GCP — CI (OIDC) or local (ADC from host).
+
+        In CI: pass oidc_request_token and oidc_request_url (from GitHub Actions).
+        Locally: pass gcloud_config (your ~/.config/gcloud directory).
+        """
+        if gcloud_config:
+            return dag.gcp_auth().gcloud_container_from_host(
+                project_id=project,
+                gcloud_config=gcloud_config,
+            )
+
+        if oidc_request_token and oidc_request_url:
+            return dag.gcp_auth().gcloud_container_from_github_actions(
+                workload_identity_provider="projects/123456/locations/global/workloadIdentityPools/github/providers/github-actions",
+                project_id=project,
+                oidc_request_token=oidc_request_token,
+                oidc_request_url=oidc_request_url,
+                service_account_email=f"ci-deployer@{project}.iam.gserviceaccount.com",
+            )
+
+        msg = "Provide either gcloud-config (local) or oidc-request-token + oidc-request-url (CI)"
+        raise ValueError(msg)
 
     @function
     @check
@@ -133,8 +148,9 @@ class AcmeDeploy:
         container: Annotated[dagger.Container, Doc("Container to deploy (from acme-backend build)")],
         service_name: Annotated[str, Doc("Service name (without prefix)")],
         team: Annotated[str, Doc("Team name for naming and labels")],
-        oidc_request_token: Annotated[dagger.Secret, Doc("ACTIONS_ID_TOKEN_REQUEST_TOKEN")],
-        oidc_request_url: Annotated[dagger.Secret, Doc("ACTIONS_ID_TOKEN_REQUEST_URL")],
+        oidc_request_token: Annotated[dagger.Secret | None, Doc("ACTIONS_ID_TOKEN_REQUEST_TOKEN (CI)")] = None,
+        oidc_request_url: Annotated[dagger.Secret | None, Doc("ACTIONS_ID_TOKEN_REQUEST_URL (CI)")] = None,
+        gcloud_config: Annotated[dagger.Directory | None, Doc("Host gcloud config dir for local auth (~/.config/gcloud)")] = None,
         environment: Annotated[str, Doc("Target environment")] = "staging",
         region: Annotated[str, Doc("GCP region")] = "europe-west1",
         git_branch: Annotated[str, Doc("Git branch (for audit labels)")] = "",
@@ -146,13 +162,21 @@ class AcmeDeploy:
         deployment in a single call. Enforces naming conventions,
         region whitelist, production branch gate, and access controls.
 
+        Authentication: pass gcloud-config for local development, or
+        oidc-request-token + oidc-request-url for CI (GitHub Actions).
+
         Production services are never publicly accessible — they require
         IAM authentication. Staging services allow unauthenticated access
         for testing convenience.
         """
         self._validate_production_branch(environment, git_branch)
         ctx = self._validate_and_resolve(team, service_name, environment, region)
-        gcloud = self._authenticate(oidc_request_token, oidc_request_url, ctx["project"])
+        gcloud = self._authenticate(
+            project=ctx["project"],
+            oidc_request_token=oidc_request_token,
+            oidc_request_url=oidc_request_url,
+            gcloud_config=gcloud_config,
+        )
         labels = self._build_labels(team, environment, git_branch, git_sha)
 
         # Scan for vulnerabilities before shipping
@@ -191,8 +215,9 @@ class AcmeDeploy:
         dist: Annotated[dagger.Directory, Doc("Built frontend output (from acme-frontend build)")],
         service_name: Annotated[str, Doc("Service name for the hosting site")],
         team: Annotated[str, Doc("Team name")],
-        oidc_request_token: Annotated[dagger.Secret, Doc("ACTIONS_ID_TOKEN_REQUEST_TOKEN")],
-        oidc_request_url: Annotated[dagger.Secret, Doc("ACTIONS_ID_TOKEN_REQUEST_URL")],
+        oidc_request_token: Annotated[dagger.Secret | None, Doc("ACTIONS_ID_TOKEN_REQUEST_TOKEN (CI)")] = None,
+        oidc_request_url: Annotated[dagger.Secret | None, Doc("ACTIONS_ID_TOKEN_REQUEST_URL (CI)")] = None,
+        gcloud_config: Annotated[dagger.Directory | None, Doc("Host gcloud config dir for local auth (~/.config/gcloud)")] = None,
         environment: Annotated[str, Doc("Target environment")] = "staging",
         git_branch: Annotated[str, Doc("Git branch (for audit trail)")] = "",
     ) -> str:
@@ -201,10 +226,18 @@ class AcmeDeploy:
         Deploys to production channel ('live') or a preview channel
         matching the environment name. Production deploys are gated
         to the main branch only.
+
+        Authentication: pass gcloud-config for local development, or
+        oidc-request-token + oidc-request-url for CI (GitHub Actions).
         """
         self._validate_production_branch(environment, git_branch)
         ctx = self._validate_and_resolve(team, service_name, environment, region="europe-west1")
-        gcloud = self._authenticate(oidc_request_token, oidc_request_url, ctx["project"])
+        gcloud = self._authenticate(
+            project=ctx["project"],
+            oidc_request_token=oidc_request_token,
+            oidc_request_url=oidc_request_url,
+            gcloud_config=gcloud_config,
+        )
 
         channel = "live" if environment == "production" else environment
 
