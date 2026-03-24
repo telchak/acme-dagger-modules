@@ -182,18 +182,20 @@ class AcmeDeploy:
         await dag.trivy(version=TRIVY_VERSION).container(container).output(format="table")
 
         # Publish to Artifact Registry
-        image_uri = await dag.gcp_artifact_registry(gcloud=gcloud).publish(
+        image_uri = await dag.gcp_artifact_registry().publish(
             container=container,
-            project=project_id,
+            gcloud=gcloud,
+            project_id=project_id,
             region=region,
             repository=f"acme-{team}",
-            image=service_name,
+            image_name=service_name,
             tag=f"{environment}-latest",
         )
 
         # Deploy to Cloud Run with org-standard configuration
-        url = await dag.gcp_cloud_run(gcloud=gcloud).service().deploy(
-            name=full_name,
+        url = await dag.gcp_cloud_run().service().deploy(
+            gcloud=gcloud,
+            service_name=full_name,
             image=image_uri,
             region=region,
             allow_unauthenticated=(environment != "production"),
@@ -203,7 +205,6 @@ class AcmeDeploy:
             memory=CLOUD_RUN_DEFAULTS["memory"],
             concurrency=CLOUD_RUN_DEFAULTS["concurrency"],
             timeout=CLOUD_RUN_DEFAULTS["timeout"],
-            labels=labels,
         )
 
         return url
@@ -232,22 +233,35 @@ class AcmeDeploy:
         """
         self._validate_production_branch(environment, git_branch)
         self._validate_and_resolve(team, service_name, environment, region="europe-west1")
+
+        # Build the frontend from source
+        dist = dag.acme_frontend().build(source=source)
+
+        # Get an access token for Firebase CLI authentication
         gcloud = self._authenticate(
             project_id=project_id,
             oidc_request_token=oidc_request_token,
             oidc_request_url=oidc_request_url,
             gcloud_config=gcloud_config,
         )
-
-        # Build the frontend from source
-        dist = dag.acme_frontend().build(source=source)
+        token_output = await gcloud.with_exec(["gcloud", "auth", "print-access-token"]).stdout()
+        access_token = dag.set_secret("firebase_access_token", token_output.strip())
 
         channel = "live" if environment == "production" else environment
 
-        url = await dag.gcp_firebase(gcloud=gcloud).hosting().deploy(
-            dist=dist,
-            project=project_id,
-            channel=channel,
-        )
+        if channel == "live":
+            return await dag.gcp_firebase().deploy(
+                project_id=project_id,
+                source=dist,
+                access_token=access_token,
+                skip_build=True,
+                deploy_functions=False,
+            )
 
-        return url
+        return await dag.gcp_firebase().deploy_preview(
+            project_id=project_id,
+            channel_id=channel,
+            source=dist,
+            access_token=access_token,
+            skip_build=True,
+        )
