@@ -18,7 +18,7 @@ class AcmeFrontend:
     - Organization-approved Node.js version (20 LTS)
     - Standardized npm cache volumes
     - Production build configuration with source map exclusion
-    - Chrome Headless for tests (no browser install needed)
+    - Vitest-based testing via Angular's built-in test runner
     - Audit check for known vulnerabilities in dependencies
     """
 
@@ -60,10 +60,10 @@ class AcmeFrontend:
             DefaultPath("."),
         ],
     ) -> str:
-        """Run the Angular test suite with Headless Chrome."""
+        """Run the Angular test suite."""
         return await (
             self._base_container(source)
-            .with_exec(["npx", "ng", "test", "--watch=false", "--browsers=ChromeHeadless"])
+            .with_exec(["npx", "ng", "test"])
             .stdout()
         )
 
