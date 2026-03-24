@@ -3,7 +3,7 @@
 from typing import Annotated
 
 import dagger
-from dagger import Doc, dag, function, object_type
+from dagger import DefaultPath, Doc, check, dag, function, object_type
 
 
 ALLOWED_REGIONS = ["europe-west1", "us-central1"]
@@ -82,14 +82,25 @@ class AcmeDeploy:
             project=project,
         )
 
-    async def _scan_container(self, container: dagger.Container) -> None:
-        """Scan container for vulnerabilities before deployment.
+    @function
+    @check
+    async def scan(
+        self,
+        source: Annotated[
+            dagger.Directory,
+            Doc("Backend source directory"),
+            DefaultPath("."),
+        ],
+        port: Annotated[int, Doc("Application port")] = 8080,
+    ) -> str:
+        """Scan the built container for HIGH and CRITICAL CVEs.
 
-        Uses Trivy to check for HIGH and CRITICAL CVEs. Fails the
-        pipeline if any are found — no vulnerable containers ship.
-        Pinned to a known safe version to avoid supply chain compromise.
+        Builds the container from source using acme-backend, then runs
+        Trivy against it. Fails if any vulnerabilities at HIGH severity
+        or above are found. Pinned to a safe Trivy version.
         """
-        await dag.trivy(version=TRIVY_VERSION).container(container).output("table")
+        container = dag.acme_backend().build(source=source, port=port)
+        return await dag.trivy(version=TRIVY_VERSION).container(container).output("table")
 
     def _build_labels(
         self,
@@ -138,7 +149,7 @@ class AcmeDeploy:
         labels = self._build_labels(team, environment, git_branch, git_sha)
 
         # Scan for vulnerabilities before shipping
-        await self._scan_container(container)
+        await dag.trivy(version=TRIVY_VERSION).container(container).output("table")
 
         # Publish to Artifact Registry
         image_uri = await dag.gcp_artifact_registry(gcloud=gcloud).publish(

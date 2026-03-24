@@ -29,6 +29,10 @@
     {
       "name": "trivy",
       "source": "github.com/sagikazarmark/daggerverse/trivy@v0.6.0"
+    },
+    {
+      "name": "acme-backend",
+      "source": "../acme-backend"
     }
   ]
 }
