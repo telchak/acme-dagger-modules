@@ -235,9 +235,6 @@ class AcmeDeploy:
         self._validate_production_branch(environment, git_branch)
         self._validate_and_resolve(team, service_name, environment, region="europe-west1")
 
-        # Build the frontend from source
-        dist = dag.acme_frontend().build(source=source)
-
         # Get an access token for Firebase CLI authentication
         gcloud = self._authenticate(
             project_id=project_id,
@@ -253,16 +250,14 @@ class AcmeDeploy:
         if channel == "live":
             return await dag.gcp_firebase().deploy(
                 project_id=project_id,
-                source=dist,
+                source=source,
                 access_token=access_token,
-                skip_build=True,
                 deploy_functions=False,
             )
 
         return await dag.gcp_firebase().deploy_preview(
             project_id=project_id,
             channel_id=channel,
-            source=dist,
+            source=source,
             access_token=access_token,
-            skip_build=True,
         )
