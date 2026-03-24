@@ -6,8 +6,8 @@ import dagger
 from dagger import DefaultPath, Doc, check, dag, function, object_type
 
 
-# Approved Node.js base image — pinned to LTS for security compliance.
-APPROVED_BASE_IMAGE = "node:20-slim"
+# Approved Node.js version — pinned to LTS for security compliance.
+APPROVED_NODE_VERSION = "20"
 
 
 @object_type
@@ -26,7 +26,7 @@ class AcmeFrontend:
         """Standard Node container with source and cached deps."""
         return (
             dag.container()
-            .from_(APPROVED_BASE_IMAGE)
+            .from_(f"node:{APPROVED_NODE_VERSION}-slim")
             .with_workdir("/app")
             .with_directory("/app", source)
             .with_mounted_cache("/root/.npm", dag.cache_volume("acme-npm"))
@@ -45,9 +45,12 @@ class AcmeFrontend:
         """
         return (
             dag.angular()
-            .with_base(APPROVED_BASE_IMAGE)
-            .with_npm_cache(dag.cache_volume("acme-npm"))
-            .build(source=source, configuration="production")
+            .build(
+                source=source,
+                configuration="production",
+                node_version=APPROVED_NODE_VERSION,
+                npm_cache=dag.cache_volume("acme-npm"),
+            )
         )
 
     @function
