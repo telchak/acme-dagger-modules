@@ -18,8 +18,8 @@
     },
     {
       "name": "gcp-cloud-run",
-      "source": "github.com/telchak/daggerverse/gcp-cloud-run@gcp-cloud-run/v0.2.0",
-      "pin": "b164465ed0d8b37d56cab2211d3ef48983fba8b9"
+      "source": "github.com/telchak/daggerverse/gcp-cloud-run@gcp-cloud-run/v0.3.0",
+      "pin": "fb92250bfe3945881e0d5d3192e5cce1e6c11e12"
     },
     {
       "name": "gcp-firebase",
