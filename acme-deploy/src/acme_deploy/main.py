@@ -151,6 +151,10 @@ class AcmeDeploy:
         repository: Annotated[str, Doc("Artifact Registry repository name (defaults to acme-{team})")] = "",
         git_branch: Annotated[str, Doc("Git branch (for audit labels)")] = "",
         git_sha: Annotated[str, Doc("Git commit SHA (for audit labels)")] = "",
+        # NOTE: This flag is exposed here for demo/testing purposes only.
+        # In a real production setup, IAM invoker checks should remain enabled
+        # and access should be controlled via proper IAM bindings or a load balancer.
+        disable_invoker_iam_check: Annotated[bool, Doc("Disable Cloud Run IAM invoker check (for demo/testing only)")] = False,
     ) -> str:
         """Build and deploy a backend service to Cloud Run with AcmeCorp compliance.
 
@@ -206,6 +210,7 @@ class AcmeDeploy:
             memory=CLOUD_RUN_DEFAULTS["memory"],
             concurrency=CLOUD_RUN_DEFAULTS["concurrency"],
             timeout=CLOUD_RUN_DEFAULTS["timeout"],
+            disable_invoker_iam_check=disable_invoker_iam_check,
         )
 
         return url
